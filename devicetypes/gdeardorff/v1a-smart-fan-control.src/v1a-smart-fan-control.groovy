@@ -17,19 +17,19 @@
 metadata {
 	definition (name: "v1a Smart Fan Control", namespace: "gdeardorff", author: "gdeardorff") {
 		capability "Switch Level"
-		capability "Button"		
 		capability "Actuator"
 		capability "Indicator"
 		capability "Switch"
 		capability "Polling"
 		capability "Refresh"
 		capability "Sensor"
+   		capability "Button"		
 
-        command "doubleUp"
-        command "doubleDown"
 		command "lowSpeed"
 		command "medSpeed"
 		command "highSpeed"
+        command "doubleUp"
+        command "doubleDown"        
 
 		attribute "currentState", "string"
 
@@ -88,6 +88,7 @@ metadata {
         standardTile("doubleDown", "device.button", width: 3, height: 2, decoration: "flat") {
 			state "default", label: "Tap ▼▼", backgroundColor: "#ffffff", action: "doubleDown", icon: "https://raw.githubusercontent.com/nuttytree/Nutty-SmartThings/master/devicetypes/nuttytree/SwitchOffIcon.png"
 		} 
+
 		controlTile("levelSliderControl", "device.level", "slider", height: 2, width: 2, inactiveLabel: false) {
 			state "level", action:"switch level.setLevel"
 		}
@@ -96,8 +97,28 @@ metadata {
 	}
 }
 
-def parse(String description) {
+def getCommandClassVersions() {
+	[
+		0x20: 1,  // Basic
+//		0x26: 1,  // SwitchMultilevel
+		0x26: 3,  // SwitchMultilevel
+		0x56: 1,  // Crc16Encap
+//		0x70: 1,  // Configuration
+		0x70: 2,  // Configuration
+        0x72: 2,  //Manufacturer Specific
+        0x85: 2,  //Manufacturer Specific        
+	]
+}
 
+def getCommandClassVersionsOrig() {
+	[
+		0x20: 1,  // Basic
+		0x26: 1,  // SwitchMultilevel
+		0x70: 1,  // Configuration
+	]
+}
+
+def parse(String description) {
     log.debug "Parse Called!"
 
 	def item1 = [
@@ -109,35 +130,19 @@ def parse(String description) {
 		value:  description
 	]
 	def result
-	def cmd = zwave.parse(description)
-//	def cmd = zwave.parse(description, [0x20: 1, 0x26: 1, 0x70: 1])
-//    def cmd = zwave.parse(description, [0x20: 1, 0x25: 1, 0x26: 3, 0x56: 1, 0x70: 2, 0x72: 2, 0x85: 2])
-//    def cmd = zwave.parse(description, [0x20: 1, 0x26: 3, 0x70: 2, 0x72: 2])
-//cc:5E,86,72,5A,85,59,73,26,27,70,56,2C,2B,7A
-	
+	def cmd = zwave.parse(description, commandClassVersions)
 	if (cmd) {
-	    log.debug "Parsed:  ${cmd}"
-//		result = createEvent(cmd)
+	    log.debug "Parsed:  ${cmd}"    
 		result = createEvent(cmd, item1)
-		log.debug "Result returned ${result?.inspect()}"
-	} else {
-     	log.debug "Non-parsed event: ${description}"
-//		item1.displayed = displayed(description, item1.isStateChange)
+		log.debug "createEvent Result: ${result?.inspect()}"        
+	}
+	else {
+     	log.debug "Non-parsed event: ${description}"    
+		item1.displayed = displayed(description, item1.isStateChange)
 		result = [item1]
 	}
+	log.debug "Parse resulted in: ${result?.descriptionText}"
 	result
-}
-
-def parse2(String description) {
-    def result = null
-    def cmd = zwave.parse(description)
-    if (cmd) {
-        result = zwaveEvent(cmd)
-        log.debug "Parsed ${cmd} to ${result.inspect()}"
-    } else {
-        log.debug "Non-parsed event: ${description}"
-    }
-    return result
 }
 
 def createEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd, Map item1) {
@@ -146,7 +151,7 @@ def createEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd, Map item1)
 	for (int i = 0; i < result.size(); i++) {
   	result[i].type = "physical"
 	}
-	log.trace "BasicReport"
+	log.trace "End BasicReport"
   result
 }
 
@@ -156,42 +161,38 @@ def createEvent(physicalgraph.zwave.commands.basicv1.BasicSet cmd, Map item1) {
 	for (int i = 0; i < result.size(); i++) {
 		result[i].type = "physical"
 	}
-	log.trace "BasicSet"
+	log.trace "End BasicSet"
 	result
 }
 
 def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelStartLevelChange cmd, Map item1) {
-	log.trace "Start SwitchMultilevelStartLevelChange"
 	[]
 	log.trace "StartLevel"
 }
 
 def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelStopLevelChange cmd, Map item1) {
-	log.trace "Start SwitchMultilevelStopLevelChange"
 	[response(zwave.basicV1.basicGet())]
 }
 
 def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelSet cmd, Map item1) {
-	log.trace "Start SwitchMultilevelSet"
-
+	log.trace "Start SwitchMultiLevelSet"
 	def result = doCreateEvent(cmd, item1)
 	for (int i = 0; i < result.size(); i++) {
 		result[i].type = "physical"
 	}
-	log.trace "SwitchMultiLevelSet"
+	log.trace "End SwitchMultiLevelSet"
 	result
 }
 
 def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd, Map item1) {
 	log.trace "Start SwitchMultilevelReport"
-
 	def result = doCreateEvent(cmd, item1)
 	result[0].descriptionText = "${item1.linkText} is ${item1.value}"
 	result[0].handlerName = cmd.value ? "statusOn" : "statusOff"
 	for (int i = 0; i < result.size(); i++) {
 		result[i].type = "digital"
 	}
-	log.trace "SwitchMultilevelReport"
+	log.trace "Start SwitchMultilevelReport"
 	result
 }
 
@@ -230,13 +231,11 @@ def doCreateEvent(physicalgraph.zwave.Command cmd, Map item1) {
 
 		result << item2
 	}
-	log.trace "doCreateEvent"
+	log.trace "end doCreateEvent"
 	result
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.configurationv1.ConfigurationReport cmd) {
-	log.trace "Start ConfigurationReport"
-
 	def value = "when off"
 	log.trace "ConfigurationReport"
 	if (cmd.configurationValue[0] == 1) {value = "when on"}
@@ -246,7 +245,7 @@ def zwaveEvent(physicalgraph.zwave.commands.configurationv1.ConfigurationReport 
 
 def createEvent(physicalgraph.zwave.Command cmd,  Map map) {
 	// Handles any Z-Wave commands we aren't interested in
-	log.debug "UNHANDLED COMMAND $cmd $map"
+	log.debug "UNHANDLED COMMAND $cmd"
 }
 
 def on() {
@@ -260,8 +259,6 @@ def off() {
 }
 
 def setLevel(value) {
-	log.trace "start setLevel(value): ${value}"
-
 	def lowThresholdvalue = (settings.lowThreshold != null && settings.lowThreshold != "") ? settings.lowThreshold.toInteger() : 33
 	def medThresholdvalue = (settings.medThreshold != null && settings.medThreshold != "") ? settings.medThreshold.toInteger() : 67
 	def highThresholdvalue = (settings.highThreshold != null && settings.highThreshold != "") ? settings.highThreshold.toInteger() : 99
@@ -282,8 +279,6 @@ def setLevel(value) {
 }
 
 def setLevel(value, duration) {
-	log.trace "setLevel(value, duration): ${value}, ${duration}"
-
 	def lowThresholdvalue = (settings.lowThreshold != null && settings.lowThreshold != "") ? settings.lowThreshold.toInteger() : 33
 	def medThresholdvalue = (settings.medThreshold != null && settings.medThreshold != "") ? settings.medThreshold.toInteger() : 67
 	def highThresholdvalue = (settings.highThreshold != null && settings.highThreshold != "") ? settings.highThreshold.toInteger() : 99
@@ -295,7 +290,7 @@ def setLevel(value, duration) {
 	def level = Math.min(value as Integer, 99)
 	def dimmingDuration = duration < 128 ? duration : 128 + Math.round(duration / 60)
 	
-	log.trace "setLevel(value): ${level}"
+	log.trace "setLevel(value, duration): ${level}"
 	
 	if (level <= lowThresholdvalue) { sendEvent(name: "currentState", value: "ADJUSTING.LOW" as String, displayed: false) }
 	if (level >= lowThresholdvalue+1 && level <= medThresholdvalue) { sendEvent(name: "currentState", value: "ADJUSTING.MED" as String, displayed: false) }
@@ -317,7 +312,20 @@ def highSpeed() {
 }
 
 def poll() {
+/*
 	zwave.switchMultilevelV1.switchMultilevelGet().format()
+    
+    def cmds = []
+    cmds << zwave.switchMultilevelV2.switchMultilevelGet().format()
+	if (getDataValue("MSR") == null) {
+		cmds << zwave.manufacturerSpecificV1.manufacturerSpecificGet().format()
+	}
+*/
+	def cmds = []
+    cmds << zwave.switchMultilevelV3.switchMultilevelGet().format()
+	if (getDataValue("MSR") == null) {
+		cmds << zwave.manufacturerSpecificV2.manufacturerSpecificGet().format()
+	}
 }
 
 def refresh() {
@@ -340,12 +348,15 @@ def indicatorNever() {
 }
 
 def doubleUp() {
+	log.trace "doubleUp()"
 	sendEvent(name: "button", value: "pushed", data: [buttonNumber: 1], descriptionText: "Double-tap up (button 1) on $device.displayName", isStateChange: true, type: "digital")
 }
 
 def doubleDown() {
+	log.trace "doubleDown()"
 	sendEvent(name: "button", value: "pushed", data: [buttonNumber: 2], descriptionText: "Double-tap down (button 2) on $device.displayName", isStateChange: true, type: "digital")
 }
+
 
 def zwaveEvent(physicalgraph.zwave.commands.crc16encapv1.Crc16Encap cmd) {
 	log.debug("zwaveEvent(): CRC-16 Encapsulation Command received: ${cmd}")
@@ -384,6 +395,7 @@ private dimmerEvents(physicalgraph.zwave.Command cmd) {
 }
 
 def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicSet cmd) {
+	log.trace "Start BasicSet"
 	if (cmd.value == 255) {
     	createEvent(name: "button", value: "pushed", data: [buttonNumber: 1], descriptionText: "Double-tap up (button 1) on $device.displayName", isStateChange: true, type: "physical")
     }
@@ -392,35 +404,29 @@ def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicSet cmd) {
     }
 }
 
+def zwaveEvent(physicalgraph.zwave.commands.manufacturerspecificv2.ManufacturerSpecificReport cmd) {
+    log.debug "---MANUFACTURER SPECIFIC REPORT V2---"
+	log.debug "manufacturerId:   ${cmd.manufacturerId}"
+	log.debug "manufacturerName: ${cmd.manufacturerName}"
+    state.manufacturer=cmd.manufacturerName
+	log.debug "productId:        ${cmd.productId}"
+	log.debug "productTypeId:    ${cmd.productTypeId}"
+	def msr = String.format("%04X-%04X-%04X", cmd.manufacturerId, cmd.productTypeId, cmd.productId)
+	updateDataValue("MSR", msr)	
+    sendEvent([descriptionText: "$device.displayName MSR: $msr", isStateChange: false])
+}
 
-///=======
-
-/*
-def zwaveEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd) {
-    def result
-    if (cmd.value == 0) {
-        result = createEvent(name: "switch", value: "off")
-    } else {
-        result = createEvent(name: "switch", value: "on")
+def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationReport cmd) {
+	log.debug "---ASSOCIATION REPORT V2--- ${device.displayName} sent groupingIdentifier: ${cmd.groupingIdentifier} maxNodesSupported: ${cmd.maxNodesSupported} nodeId: ${cmd.nodeId} reportsToFollow: ${cmd.reportsToFollow}"
+    state.group3 = "1,2"
+    if (cmd.groupingIdentifier == 3) {
+    	if (cmd.nodeId.contains(zwaveHubNodeId)) {
+        	createEvent(name: "numberOfButtons", value: 2, displayed: false)
+        }
+        else {
+        	sendEvent(name: "numberOfButtons", value: 0, displayed: false)
+			sendHubCommand(new physicalgraph.device.HubAction(zwave.associationV2.associationSet(groupingIdentifier: 3, nodeId: zwaveHubNodeId).format()))
+			sendHubCommand(new physicalgraph.device.HubAction(zwave.associationV2.associationGet(groupingIdentifier: 3).format()))
+        }
     }
-    return result
 }
-*/
-def zwaveEvent(physicalgraph.zwave.commands.meterv3.MeterReport cmd) {
-    def result
-    if (cmd.scale == 0) {
-        result = createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kWh")
-    } else if (cmd.scale == 1) {
-        result = createEvent(name: "energy", value: cmd.scaledMeterValue, unit: "kVAh")
-    } else {
-        result = createEvent(name: "power", value: cmd.scaledMeterValue, unit: "W")
-    }
-    return result
-}
-
-def zwaveEvent(physicalgraph.zwave.Command cmd) {
-    // This will capture any commands not handled by other instances of zwaveEvent
-    // and is recommended for development so you can see every command the device sends
-    return createEvent(descriptionText: "${device.displayName}: ${cmd}")
-}
-
