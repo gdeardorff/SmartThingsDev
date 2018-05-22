@@ -23,10 +23,13 @@ metadata {
 		capability "Polling"
 		capability "Refresh"
 		capability "Sensor"
+   		capability "Button"		
 
 		command "lowSpeed"
 		command "medSpeed"
 		command "highSpeed"
+        command "doubleTapUp"
+        command "doubleTapDown"        
 
 		attribute "currentState", "string"
 
@@ -86,6 +89,18 @@ metadata {
 	}
 }
 
+def getCommandClassVersions() {
+	[
+		0x20: 1,  // Basic
+		0x25: 1,  // SwitchBinary
+		0x26: 3,  // SwitchMultilevel
+		0x56: 1,  // Crc16Encap
+		0x70: 2,  // Configuration
+        0x72: 2,  // Manufacturer Specific
+        0x85: 2,  // Association
+	]
+}
+
 def parse(String description) {
 	def item1 = [
 		canBeCurrentState: false,
@@ -96,7 +111,7 @@ def parse(String description) {
 		value:  description
 	]
 	def result
-	def cmd = zwave.parse(description, [0x20: 1, 0x26: 1, 0x70: 1])
+	def cmd = zwave.parse(description, commandClassVersions)
 	if (cmd) {
 		result = createEvent(cmd, item1)
 	}
@@ -105,6 +120,19 @@ def parse(String description) {
 		result = [item1]
 	}
 	log.debug "Parse returned ${result?.descriptionText}"
+	result
+}
+
+def createEvent(physicalgraph.zwave.commands.basicv1.BasicSet cmd, Map item1) {
+	log.trace "Start createEvent(BasicSet)"
+    def result
+    def level = 99
+	if (cmd.value == 255) {
+    	result = createEvent(name: "button", value: "pushed", data: [buttonNumber: 1], descriptionText: "Double-tap up (button 1) on $device.displayName", isStateChange: true, type: "physical")
+	} else 	if (cmd.value == 0) {
+    	result = createEvent(name: "button", value: "pushed", data: [buttonNumber: 2], descriptionText: "Double-tap down (button 2) on $device.displayName", isStateChange: true, type: "physical")
+	}
+	log.trace "End createEvent(BasicSet)"
 	result
 }
 
@@ -117,25 +145,16 @@ def createEvent(physicalgraph.zwave.commands.basicv1.BasicReport cmd, Map item1)
   result
 }
 
-def createEvent(physicalgraph.zwave.commands.basicv1.BasicSet cmd, Map item1) {
-	def result = doCreateEvent(cmd, item1)
-	for (int i = 0; i < result.size(); i++) {
-		result[i].type = "physical"
-	}
-	log.trace "BasicSet"
-	result
-}
-
-def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelStartLevelChange cmd, Map item1) {
+def createEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelStartLevelChange cmd, Map item1) {
 	[]
 	log.trace "StartLevel"
 }
 
-def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelStopLevelChange cmd, Map item1) {
+def createEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelStopLevelChange cmd, Map item1) {
 	[response(zwave.basicV1.basicGet())]
 }
 
-def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelSet cmd, Map item1) {
+def createEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelSet cmd, Map item1) {
 	def result = doCreateEvent(cmd, item1)
 	for (int i = 0; i < result.size(); i++) {
 		result[i].type = "physical"
@@ -144,7 +163,7 @@ def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevel
 	result
 }
 
-def createEvent(physicalgraph.zwave.commands.switchmultilevelv1.SwitchMultilevelReport cmd, Map item1) {
+def createEvent(physicalgraph.zwave.commands.switchmultilevelv3.SwitchMultilevelReport cmd, Map item1) {
 	def result = doCreateEvent(cmd, item1)
 	result[0].descriptionText = "${item1.linkText} is ${item1.value}"
 	result[0].handlerName = cmd.value ? "statusOn" : "statusOff"
@@ -289,4 +308,38 @@ def indicatorWhenOff() {
 def indicatorNever() {
 	sendEvent(name: "indicatorStatus", value: "never", display: false)
 	zwave.configurationV1.configurationSet(configurationValue: [2], parameterNumber: 3, size: 1).format()
+}
+
+def doubleTapUp() {
+	log.trace "doubleTapUp()"
+
+	def level = device.currentState("level").value.toInteger()
+	def low = settings.lowThreshold.toInteger()
+	def med = settings.medThreshold.toInteger()
+	def high = settings.highThreshold.toInteger()
+    
+	if (level < low) { 
+		setLevel("LOW")
+	} else if (level >= low && level < med) { 
+		setLevel("MED")
+    } else if (level >= med && level < high) { 
+		setLevel("HIGH")
+    }
+}
+
+def doubleTapDown() {
+	log.trace "doubleTapDown()"
+
+	def level = device.currentState("level").value.toInteger()
+	def low = settings.lowThreshold.toInteger()
+	def med = settings.medThreshold.toInteger()
+	def high = settings.highThreshold.toInteger()
+    
+	if (level > low && level <= med) { 
+		setLevel("LOW")
+    } else if (level > med && level <= high) { 
+		setLevel("MED")
+    } else if (level > high) { 
+		setLevel("HIGH")
+    }
 }
