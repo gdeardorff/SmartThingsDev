@@ -36,6 +36,24 @@ metadata {
 		//fingerprint deviceId: "0x1101", inClusters: "0x26, 0x27, 0x70, 0x86, 0x72"
 	}
 
+	simulator {
+		status "on":  "command: 2003, payload: FF"
+		status "off": "command: 2003, payload: 00"
+		status "09%": "command: 2003, payload: 09"
+		status "10%": "command: 2003, payload: 0A"
+		status "33%": "command: 2003, payload: 21"
+		status "66%": "command: 2003, payload: 42"
+		status "99%": "command: 2003, payload: 63"
+
+		// reply messages
+		reply "2001FF,delay 5000,2602": "command: 2603, payload: FF"
+		reply "200100,delay 5000,2602": "command: 2603, payload: 00"
+		reply "200119,delay 5000,2602": "command: 2603, payload: 19"
+		reply "200132,delay 5000,2602": "command: 2603, payload: 32"
+		reply "20014B,delay 5000,2602": "command: 2603, payload: 4B"
+		reply "200163,delay 5000,2602": "command: 2603, payload: 63"
+	}
+
 	preferences {
 		section("Fan Thresholds") {
 			input "lowThreshold", "number", title: "Low Threshold", range: "1..99"

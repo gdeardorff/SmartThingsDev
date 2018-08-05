@@ -16,14 +16,15 @@
  */
 metadata {
 	definition (name: "v2 Smart Fan Control", namespace: "gdeardorff", author: "gdeardorff") {
-		capability "Switch Level"
 		capability "Actuator"
+   		capability "Button"		
+		capability "Configuration"
 		capability "Indicator"
-		capability "Switch"
 		capability "Polling"
 		capability "Refresh"
 		capability "Sensor"
-   		capability "Button"		
+		capability "Switch"
+		capability "Switch Level"
 
 		command "lowSpeed"
 		command "medSpeed"
@@ -219,6 +220,21 @@ def zwaveEvent(physicalgraph.zwave.commands.configurationv1.ConfigurationReport 
 	[name: "indicatorStatus", value: value, display: false]
 }
 
+def zwaveEvent(physicalgraph.zwave.commands.associationv2.AssociationReport cmd) {
+	log.debug "---ASSOCIATION REPORT V2--- ${device.displayName} sent groupingIdentifier: ${cmd.groupingIdentifier} maxNodesSupported: ${cmd.maxNodesSupported} nodeId: ${cmd.nodeId} reportsToFollow: ${cmd.reportsToFollow}"
+    state.group3 = "1,2"
+    if (cmd.groupingIdentifier == 3) {
+    	if (cmd.nodeId.contains(zwaveHubNodeId)) {
+        	createEvent(name: "numberOfButtons", value: 2, displayed: false)
+        }
+        else {
+        	sendEvent(name: "numberOfButtons", value: 0, displayed: false)
+			sendHubCommand(new physicalgraph.device.HubAction(zwave.associationV2.associationSet(groupingIdentifier: 3, nodeId: zwaveHubNodeId).format()))
+			sendHubCommand(new physicalgraph.device.HubAction(zwave.associationV2.associationGet(groupingIdentifier: 3).format()))
+        }
+    }
+}
+
 def createEvent(physicalgraph.zwave.Command cmd,  Map map) {
 	// Handles any Z-Wave commands we aren't interested in
 	log.debug "UNHANDLED COMMAND $cmd"
@@ -288,26 +304,47 @@ def highSpeed() {
 }
 
 def poll() {
-	zwave.switchMultilevelV1.switchMultilevelGet().format()
+	zwave.switchMultilevelV3.switchMultilevelGet().format()
 }
 
 def refresh() {
-	zwave.switchMultilevelV1.switchMultilevelGet().format()
+	def cmds = []
+	cmds << zwave.switchMultilevelV3.switchMultilevelGet().format()
+    cmds << zwave.configurationV2.configurationGet(parameterNumber: 3).format()
+    cmds << zwave.configurationV2.configurationGet(parameterNumber: 4).format()
+    cmds << zwave.associationV2.associationGet(groupingIdentifier: 3).format()
+	if (getDataValue("MSR") == null) {
+		cmds << zwave.manufacturerSpecificV1.manufacturerSpecificGet().format()
+	}
+	delayBetween(cmds,500)
 }
 
 def indicatorWhenOn() {
 	sendEvent(name: "indicatorStatus", value: "when on", display: false)
-	zwave.configurationV1.configurationSet(configurationValue: [1], parameterNumber: 3, size: 1).format()
+	zwave.configurationV2.configurationSet(configurationValue: [1], parameterNumber: 3, size: 1).format()
 }
 
 def indicatorWhenOff() {
 	sendEvent(name: "indicatorStatus", value: "when off", display: false)
-	zwave.configurationV1.configurationSet(configurationValue: [0], parameterNumber: 3, size: 1).format()
+	zwave.configurationV2.configurationSet(configurationValue: [0], parameterNumber: 3, size: 1).format()
 }
 
 def indicatorNever() {
 	sendEvent(name: "indicatorStatus", value: "never", display: false)
-	zwave.configurationV1.configurationSet(configurationValue: [2], parameterNumber: 3, size: 1).format()
+	zwave.configurationV2.configurationSet(configurationValue: [2], parameterNumber: 3, size: 1).format()
+}
+
+def configure() {
+    def cmds = []
+    // Get current config parameter values
+    cmds << zwave.configurationV2.configurationGet(parameterNumber: 3).format()
+    cmds << zwave.configurationV2.configurationGet(parameterNumber: 4).format()
+    
+    // Add the hub to association group 3 to get double-tap notifications
+    cmds << zwave.associationV2.associationSet(groupingIdentifier: 3, nodeId: zwaveHubNodeId).format()
+    cmds << zwave.associationV2.associationGet(groupingIdentifier: 3).format()
+    
+    delayBetween(cmds,500)
 }
 
 def doubleTapUp() {
